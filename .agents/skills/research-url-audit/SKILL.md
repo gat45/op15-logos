@@ -17,6 +17,12 @@ not a claim that every URL has been read.
    pwsh -File .agents/skills/research-url-audit/scripts/build_url_registry.ps1
    ```
 
+   Then test availability without changing audit status:
+
+   ```powershell
+   pwsh -File .agents/skills/research-url-audit/scripts/test_url_registry.ps1
+   ```
+
 2. Read `docs/SOURCE_AUDIT.md` and `docs/CODE_COMPARISON.md` first. Preserve
    existing row statuses when refreshing the registry.
 3. Work one thematic batch at a time. For a repository, inspect licence,
@@ -35,6 +41,8 @@ Only these values are allowed in `docs/URL_REGISTRY.csv`:
 - `rejected` — unsuitable, unavailable, incompatible or licence-blocked; state why.
 
 Never infer `audited`, `experimented` or `integrated` from a README claim.
+An HTTP response only establishes the separate `availability` field; redirects,
+login pages and a `200` response are not an audit.
 
 ## Integration rules
 
