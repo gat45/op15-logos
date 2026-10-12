@@ -15,6 +15,17 @@ Les statuts disponibles sont `declared`, `proposed`, `unverified`, `verified` et
 `refuted`. Seul un vérificateur indépendant pourra plus tard produire
 `verified` ou `refuted`.
 
+## Liens et calculs
+
+`memory_relations` conserve des liens `supporte`, `contredit` ou `depend_de`
+entre deux identifiants de mémoire. Le graphe montre donc des associations
+explicites sans transformer une association en vérité.
+
+Le vérificateur arithmétique local accepte uniquement nombres, parenthèses et
+opérateurs `+ - * /`. Lorsqu'il termine, le résultat est sauvegardé comme une
+preuve `verified` avec la provenance `calculator`. Toute autre preuve reste
+`unverified` jusqu'à son propre vérificateur.
+
 ## Sources étudiées et décision
 
 - **Jarvix Memory :** son cycle hypothèse/expérience/verdict est un contrat de

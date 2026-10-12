@@ -109,6 +109,9 @@ private class HarnessStore(context: Context) {
     fun loadMemoryRecords(): List<MemoryRecord> = memory.records()
     fun addHypothesis(text: String) = memory.append("hypothesis", text, "proposed", "Utilisateur")
     fun addEvidence(text: String, source: String) = memory.append("evidence", text, "unverified", source.ifBlank { "Utilisateur" })
+    fun addCalculation(expression: String, value: Double) = memory.append("evidence", "Calcul vérifié : $expression = $value", "verified", "calculator")
+    fun loadLinks(): List<MemoryLink> = memory.links()
+    fun link(fromId: Long, toId: Long, relation: String) = memory.link(fromId, toId, relation)
     fun clearTurns() = memory.clearTurns()
 }
 
@@ -141,7 +144,8 @@ private fun LogosApp(store: HarnessStore) {
     var busy by remember { mutableStateOf(false) }
     var analysis by remember { mutableStateOf(Analysis(emptyList(), emptyList(), EvidenceStatus.UNVERIFIED)) }
     var memoryRecords by remember { mutableStateOf(store.loadMemoryRecords()) }
-    val tabs = listOf("Dialogue", "Plan", "Raisonnement", "Mémoire", "Preuves", "Réglages")
+    var memoryLinks by remember { mutableStateOf(store.loadLinks()) }
+    val tabs = listOf("Dialogue", "Plan", "Raisonnement", "Mémoire", "Graphe", "Preuves", "Réglages")
     fun submit() {
         val text = draft.trim(); if (text.isEmpty() || busy) return
         analysis = ReasoningController.assess(text)
@@ -161,10 +165,27 @@ private fun LogosApp(store: HarnessStore) {
                 1 -> PlanPanel(analysis)
                 2 -> ReasoningPanel(analysis)
                 3 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); memoryRecords = store.loadMemoryRecords() }, { turns.clear(); store.clearTurns() })
-                4 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); memoryRecords = store.loadMemoryRecords() })
-                5 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
+                4 -> GraphPanel(memoryRecords, memoryLinks) { from, to, relation -> store.link(from, to, relation); memoryLinks = store.loadLinks() }
+                5 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); memoryRecords = store.loadMemoryRecords() }, { expression, value -> store.addCalculation(expression, value); memoryRecords = store.loadMemoryRecords() })
+                6 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
             }
         }
+    }
+}
+
+@Composable private fun GraphPanel(records: List<MemoryRecord>, links: List<MemoryLink>, addLink: (Long, Long, String) -> Unit) {
+    var from by remember { mutableStateOf("") }; var to by remember { mutableStateOf("") }; var relation by remember { mutableStateOf("supporte") }
+    var error by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Graphe d'associations", style = MaterialTheme.typography.titleLarge)
+        Text("Relie des éléments mémorisés. Un lien décrit une relation, pas une preuve de vérité.")
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) { items(records) { Card { Text("#${it.id} · ${it.kind} · ${it.status}\n${it.content}", Modifier.padding(8.dp)) } } }
+        OutlinedTextField(value = from, onValueChange = { from = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Identifiant source") })
+        OutlinedTextField(value = to, onValueChange = { to = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Identifiant cible") })
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("supporte", "contredit", "depend_de").forEach { AssistChip(onClick = { relation = it }, label = { Text(it) }) } }
+        Button(onClick = { runCatching { addLink(from.toLong(), to.toLong(), relation) }.onSuccess { error = ""; from = ""; to = "" }.onFailure { error = it.message ?: "Lien invalide" } }, enabled = from.isNotBlank() && to.isNotBlank()) { Text("Créer le lien") }
+        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+        links.take(12).forEach { Text("#${it.fromId} ${it.relation} #${it.toId}", style = MaterialTheme.typography.labelMedium) }
     }
 }
 
@@ -203,15 +224,20 @@ private fun LogosApp(store: HarnessStore) {
     Button(onClick = clear, enabled = turns.isNotEmpty()) { Text("Effacer les échanges") }
     }
 }
-@Composable private fun EvidencePanel(analysis: Analysis, records: List<MemoryRecord>, addEvidence: (String, String) -> Unit) {
+@Composable private fun EvidencePanel(analysis: Analysis, records: List<MemoryRecord>, addEvidence: (String, String) -> Unit, addCalculation: (String, Double) -> Unit) {
     var statement by remember { mutableStateOf("") }
     var source by remember { mutableStateOf("") }
+    var formula by remember { mutableStateOf("") }
+    var calculationMessage by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Preuves et vérification", style = MaterialTheme.typography.titleLarge)
     Text("Ajoute une observation ou une source. Elle reste non vérifiée jusqu'à l'exécution d'un vérificateur indépendant.")
     OutlinedTextField(value = statement, onValueChange = { statement = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Observation ou affirmation") })
     OutlinedTextField(value = source, onValueChange = { source = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Source ou URL") })
     Button(onClick = { if (statement.isNotBlank()) { addEvidence(statement, source); statement = ""; source = "" } }, enabled = statement.isNotBlank()) { Text("Conserver comme preuve non vérifiée") }
+    OutlinedTextField(value = formula, onValueChange = { formula = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Calcul à vérifier, ex. (7+3)*2") })
+    Button(onClick = { CalculatorVerifier.evaluate(formula).onSuccess { addCalculation(formula, it.value); calculationMessage = "Calcul vérifié : ${it.value}" }.onFailure { calculationMessage = it.message ?: "Calcul invalide" } }, enabled = formula.isNotBlank()) { Text("Vérifier le calcul") }
+    if (calculationMessage.isNotBlank()) Text(calculationMessage)
     Text("Dernier statut du contrôleur : ${analysis.status.name}")
     LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         items(records.filter { it.kind == "evidence" }) { record -> Card { Column(Modifier.padding(10.dp)) { Text(record.status, style = MaterialTheme.typography.labelMedium); Text(record.content); Text("provenance : ${record.source}", style = MaterialTheme.typography.labelSmall) } } }
