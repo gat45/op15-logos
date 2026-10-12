@@ -3,11 +3,15 @@ name: research-url-audit
 description: Audit a collected research URL catalogue in batches, recording ownership, licence, code evidence, Android suitability and a concrete integration decision. Use for OP15 Logos source research; do not use it to add unreviewed dependencies.
 ---
 
-# Audit de registre d'URLs — OP15 Logos
+# Analyse et audit de registre d'URLs — OP15 Logos
 
-Use this skill when a request asks to read, compare, classify or integrate the
-URLs collected for Logos. Its output is an evidence-backed decision register,
-not a claim that every URL has been read.
+Use this skill when a request asks to read, understand, compare, classify or
+integrate the URLs collected for Logos. Its output is an evidence-backed
+decision register, not a claim that every URL has been read.
+
+An availability test is merely triage. The actual purpose of this skill is to
+understand a source well enough to decide whether Logos needs an adapter, a
+portable data contract, a benchmark, or nothing at all.
 
 ## Start with the local register
 
@@ -26,8 +30,13 @@ not a claim that every URL has been read.
 2. Read `docs/SOURCE_AUDIT.md` and `docs/CODE_COMPARISON.md` first. Preserve
    existing row statuses when refreshing the registry.
 3. Work one thematic batch at a time. For a repository, inspect licence,
-   dependency manifest, public interfaces and tests. For a paper, inspect the
-   abstract, method, evaluation setting and stated limitation.
+   dependency manifest, public interfaces, one representative implementation
+   path and tests. For a paper, inspect the abstract, method, evaluation
+   setting and stated limitation.
+4. For every source that is more than `opened`, answer the six questions in
+   [the audit template](references/audit-template.md). Cite exact files,
+   symbols, documentation sections or experiment commands. A project title or
+   README slogan is not an answer.
 
 ## Status vocabulary
 
@@ -65,6 +74,19 @@ For every completed batch, append a compact table to `docs/SOURCE_AUDIT.md`:
 URL, factual role, code or method inspected, licence/constraint, Android cost,
 decision, and the specific next verification. If code comparisons influence
 architecture, also update `docs/CODE_COMPARISON.md`.
+
+The decision must be one of:
+
+- **adapter** — call an external/local capability behind a permission boundary;
+- **data contract** — reimplement a small portable model such as a claim,
+  evidence record or action state machine;
+- **benchmark** — evaluate Logos against it outside production;
+- **reference only** — useful idea but no safe or useful integration path;
+- **reject** — incompatible licence, security model, cost or platform.
+
+Before proposing code, name the exact Logos interface it will extend and the
+acceptance test that would prove the change. This prevents a crawler, a model,
+or a memory service from being added merely because it has an impressive name.
 
 ## Stop conditions
 
