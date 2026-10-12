@@ -112,6 +112,10 @@ private class HarnessStore(context: Context) {
     fun addCalculation(expression: String, value: Double) = memory.append("evidence", "Calcul vérifié : $expression = $value", "verified", "calculator")
     fun loadLinks(): List<MemoryLink> = memory.links()
     fun link(fromId: Long, toId: Long, relation: String) = memory.link(fromId, toId, relation)
+    fun addClaim(text: String, critical: Boolean, evidenceIds: List<Long>) = memory.addClaim(text, critical, evidenceIds)
+    fun loadClaims(): List<ClaimRecord> = memory.claims()
+    fun loadAuditEvents(): List<AuditEvent> = memory.auditEvents()
+    fun verifyAudit(): AuditReport = memory.verifyAudit()
     fun clearTurns() = memory.clearTurns()
 }
 
@@ -145,7 +149,17 @@ private fun LogosApp(store: HarnessStore) {
     var analysis by remember { mutableStateOf(Analysis(emptyList(), emptyList(), EvidenceStatus.UNVERIFIED)) }
     var memoryRecords by remember { mutableStateOf(store.loadMemoryRecords()) }
     var memoryLinks by remember { mutableStateOf(store.loadLinks()) }
-    val tabs = listOf("Dialogue", "Plan", "Raisonnement", "Mémoire", "Graphe", "Preuves", "Réglages")
+    var claims by remember { mutableStateOf(store.loadClaims()) }
+    var auditEvents by remember { mutableStateOf(store.loadAuditEvents()) }
+    var auditReport by remember { mutableStateOf(store.verifyAudit()) }
+    fun refreshGovernance() {
+        memoryRecords = store.loadMemoryRecords()
+        memoryLinks = store.loadLinks()
+        claims = store.loadClaims()
+        auditEvents = store.loadAuditEvents()
+        auditReport = store.verifyAudit()
+    }
+    val tabs = listOf("Dialogue", "Plan", "Raisonnement", "Mémoire", "Graphe", "Preuves", "Affirmations", "Audit", "Réglages")
     fun submit() {
         val text = draft.trim(); if (text.isEmpty() || busy) return
         analysis = ReasoningController.assess(text)
@@ -154,7 +168,7 @@ private fun LogosApp(store: HarnessStore) {
         scope.launch {
             val answer = withContext(Dispatchers.IO) { runCatching { OpenAiClient.complete(endpoint, text) }.getOrElse { "Connexion modèle impossible : ${it.message}" } }
             val modelTurn = Turn("Logos", answer)
-            turns += modelTurn; store.appendTurn(modelTurn); memoryRecords = store.loadMemoryRecords(); busy = false
+            turns += modelTurn; store.appendTurn(modelTurn); refreshGovernance(); busy = false
         }
     }
     Scaffold(topBar = { TopAppBar(title = { Text("OP15 Logos") }, actions = { Text("mémoire locale", Modifier.padding(end = 16.dp), style = MaterialTheme.typography.labelSmall) }) }) { padding ->
@@ -164,10 +178,12 @@ private fun LogosApp(store: HarnessStore) {
                 0 -> ChatPanel(turns, draft, { draft = it }, busy, ::submit)
                 1 -> PlanPanel(analysis)
                 2 -> ReasoningPanel(analysis)
-                3 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); memoryRecords = store.loadMemoryRecords() }, { turns.clear(); store.clearTurns() })
-                4 -> GraphPanel(memoryRecords, memoryLinks) { from, to, relation -> store.link(from, to, relation); memoryLinks = store.loadLinks() }
-                5 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); memoryRecords = store.loadMemoryRecords() }, { expression, value -> store.addCalculation(expression, value); memoryRecords = store.loadMemoryRecords() })
-                6 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
+                3 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); refreshGovernance() }, { turns.clear(); store.clearTurns(); refreshGovernance() })
+                4 -> GraphPanel(memoryRecords, memoryLinks) { from, to, relation -> store.link(from, to, relation); refreshGovernance() }
+                5 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); refreshGovernance() }, { expression, value -> store.addCalculation(expression, value); refreshGovernance() })
+                6 -> ClaimPanel(memoryRecords, claims) { text, critical, evidenceIds -> store.addClaim(text, critical, evidenceIds); refreshGovernance() }
+                7 -> AuditPanel(auditEvents, auditReport, ::refreshGovernance)
+                8 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
             }
         }
     }
@@ -244,6 +260,54 @@ private fun LogosApp(store: HarnessStore) {
     }
     Text("Prochaine intégration : calculateur déterministe, recherche sourcée et tests d'outils sous permission.")
     }
+}
+
+@Composable private fun ClaimPanel(records: List<MemoryRecord>, claims: List<ClaimRecord>, addClaim: (String, Boolean, List<Long>) -> Unit) {
+    var claimText by remember { mutableStateOf("") }
+    var evidenceIdsText by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    fun submit(critical: Boolean) {
+        val ids = evidenceIdsText.split(',').mapNotNull { it.trim().toLongOrNull() }
+        runCatching { addClaim(claimText.trim(), critical, ids) }
+            .onSuccess { claimText = ""; evidenceIdsText = ""; error = "" }
+            .onFailure { error = it.message ?: "Affirmation invalide" }
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Affirmations et preuves", style = MaterialTheme.typography.titleLarge)
+        Text("Une affirmation critique doit référencer une ou plusieurs preuves locales. Le lien est traçable, mais ne transforme pas une source non vérifiée en fait.")
+        OutlinedTextField(value = claimText, onValueChange = { claimText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Affirmation") })
+        OutlinedTextField(value = evidenceIdsText, onValueChange = { evidenceIdsText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Identifiants des preuves, ex. 4, 7") })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { submit(false) }, enabled = claimText.isNotBlank()) { Text("Enregistrer") }
+            Button(onClick = { submit(true) }, enabled = claimText.isNotBlank() && evidenceIdsText.isNotBlank()) { Text("Marquer critique") }
+        }
+        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+        Text("Preuves disponibles : ${records.count { it.kind == "evidence" }}", style = MaterialTheme.typography.labelMedium)
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(claims) { claim -> Card { Column(Modifier.padding(10.dp)) {
+                Text(if (claim.critical) "critique · ${claim.status}" else claim.status, style = MaterialTheme.typography.labelMedium)
+                Text(claim.text)
+                Text("preuves liées : ${claim.evidenceIds.joinToString().ifBlank { "aucune" }}", style = MaterialTheme.typography.labelSmall)
+            } }
+        }
+    }
+}
+}
+
+@Composable private fun AuditPanel(events: List<AuditEvent>, report: AuditReport, refresh: () -> Unit) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Text("Journal local", style = MaterialTheme.typography.titleLarge)
+    Text(if (report.valid) "Intégrité : valide" else "Intégrité : invalide", color = if (report.valid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+    Text(report.message, style = MaterialTheme.typography.bodySmall)
+    Text("Chaque événement conserve le hachage de l'événement précédent. Le contenu sensible est réduit avant écriture dans le journal.")
+    Button(onClick = refresh) { Text("Actualiser et vérifier") }
+    LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(events) { event -> Card { Column(Modifier.padding(10.dp)) {
+            Text(event.action, style = MaterialTheme.typography.labelMedium)
+            Text(event.details)
+            Text("empreinte : ${event.eventHash.take(16)}…", style = MaterialTheme.typography.labelSmall)
+        } }
+    }
+}
 }
 
 @Composable private fun SettingsPanel(endpoint: String, setEndpoint: (String) -> Unit, save: () -> Unit) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -26,6 +26,24 @@ opérateurs `+ - * /`. Lorsqu'il termine, le résultat est sauvegardé comme une
 preuve `verified` avec la provenance `calculator`. Toute autre preuve reste
 `unverified` jusqu'à son propre vérificateur.
 
+## Affirmations critiques et audit
+
+Une table `claims` conserve les affirmations séparément des souvenirs. Une
+affirmation marquée **critique** doit pointer vers au moins une entrée de type
+`evidence`, via `claim_evidence`. Son statut est alors `linked_evidence` : cela
+prouve l'existence du lien, pas la véracité de la preuve liée.
+
+Chaque ajout de mémoire, relation ou affirmation écrit un événement dans
+`audit_events`. L'événement contient l'empreinte SHA-256 de l'événement
+précédent et les détails sont réduits avant stockage (par exemple les jetons
+Bearer). L'écran **Audit** vérifie localement cette chaîne.
+
+Limite assumée : cette chaîne rend une altération détectable dans la base
+présente ; elle n'est ni signée par une clé matérielle ni exportée vers un
+serveur. La suppression d'une base entière reste possible par l'utilisateur ou
+le système Android. Une future exportation signée doit rester une fonction
+explicite et approuvée.
+
 ## Sources étudiées et décision
 
 - **Jarvix Memory :** son cycle hypothèse/expérience/verdict est un contrat de
