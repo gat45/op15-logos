@@ -39,6 +39,19 @@ depuis un adaptateur PC/service ; seules les briques Kotlin/Android légères so
 | https://nxus.fr/cas-usage-agents-ia/preparer-decision-avocat-du-diable | Méthode de contre-argumentation avant décision. | Ne remplace pas une source ou un oracle indépendant. | Registre d'objections distinct des conclusions. |
 | https://nxus.fr/blog/setup-ia-agentique-memoire-outils-securite | Séparation contexte, outils, contrôles humains et permissions limitées. | Retour d'expérience, pas une garantie de sécurité. | Mémoire lisible, permissions minimales, preuve post-action. |
 
+## Lot B — collecte web et médias, consulté le 2026-10-12
+
+| Source | Rôle réel confirmé | Licence / limite | Décision Logos |
+|---|---|---|---|
+| https://github.com/firecrawl/firecrawl | Plateforme de recherche, extraction, interaction et crawl ; les appels d'API exigent une clé. | AGPL-3.0 pour le dépôt ; service/API externe et coût d'usage à contrôler. | Adaptateur PC/MCP optionnel, jamais une clé embarquée dans l'APK. Toute page importée devient une `evidence` avec URL et date. |
+| https://github.com/firecrawl/cli | CLI et skills de Firecrawl. | Runtime Node et clé de service ; pas Android natif. | Utilisable par l'environnement PC autorisé, pas depuis le processus Android. |
+| https://docs.firecrawl.dev | Documentation de l'API de crawl/extraction. | API réseau ; respecter limites, conditions et droits des sites. | Contrat d'adaptateur futur, désactivé par défaut. |
+| https://github.com/kernelmethod/scrapling | Petit crawler Go avec test dans le dépôt. | MIT ; binaire Go à auditer par plateforme avant installation. | Candidat PC seulement ; aucune exécution automatique depuis l'APK. |
+| https://github.com/supadata-ai | Organisation liée à une API d'extraction média. | Service tiers : clé, coût et politique de données à vérifier par endpoint. | Source ouverte, non intégrée. |
+| https://github.com/supadata-ai/skills | Skills d'intégration Supadata. | Vérifier chaque skill et ses permissions avant installation. | Référence pour un adaptateur média explicitement autorisé. |
+| https://supadata.ai | API de transcriptions, métadonnées et analyse de vidéos sociales. | API hébergée, données externes et clé : pas de mémoire automatique. | Une transcription importée reste non vérifiée et cite URL + date + fournisseur. |
+| https://crawlee.dev | Documentation d'un framework de crawl. | Runtime et licence à vérifier par version avant réutilisation. | Référence PC ; aucun crawler embarqué dans l'APK. |
+
 ## File d'audit priorisée
 
 ### Logique, preuve et arguments

@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class EvidenceStatus { HYPOTHESIS, UNVERIFIED, VERIFIED, REFUTED }
-private data class Turn(val role: String, val text: String, val time: Long = System.currentTimeMillis())
+data class Turn(val role: String, val text: String, val time: Long = System.currentTimeMillis())
 private data class Analysis(
     val lenses: List<String>,
     val questions: List<String>,
@@ -101,18 +101,14 @@ private object ReasoningController {
 
 private class HarnessStore(context: Context) {
     private val prefs = context.getSharedPreferences("logos_harness", Context.MODE_PRIVATE)
+    private val memory = LogosMemoryDb(context)
     fun endpoint(): String = prefs.getString("endpoint", "") ?: ""
     fun setEndpoint(value: String) = prefs.edit().putString("endpoint", value.trim()).apply()
-    fun loadTurns(): List<Turn> = runCatching {
-        val array = JSONArray(prefs.getString("turns", "[]"))
-        List(array.length()) { i -> array.getJSONObject(i).let { Turn(it.getString("role"), it.getString("text"), it.getLong("time")) } }
-    }.getOrDefault(emptyList())
-    fun saveTurns(turns: List<Turn>) {
-        val array = JSONArray()
-        turns.takeLast(100).forEach { array.put(JSONObject().put("role", it.role).put("text", it.text).put("time", it.time)) }
-        prefs.edit().putString("turns", array.toString()).apply()
-    }
-    fun clear() = prefs.edit().remove("turns").apply()
+    fun loadTurns(): List<Turn> = memory.turns()
+    fun appendTurn(turn: Turn) = memory.append("turn", turn.text, if (turn.role == "Utilisateur") "declared" else "unverified", turn.role)
+    fun loadMemoryRecords(): List<MemoryRecord> = memory.records()
+    fun addHypothesis(text: String) = memory.append("hypothesis", text, "proposed", "Utilisateur")
+    fun clearTurns() = memory.clearTurns()
 }
 
 private object OpenAiClient {
@@ -143,14 +139,17 @@ private fun LogosApp(store: HarnessStore) {
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var analysis by remember { mutableStateOf(Analysis(emptyList(), emptyList(), EvidenceStatus.UNVERIFIED)) }
+    var memoryRecords by remember { mutableStateOf(store.loadMemoryRecords()) }
     val tabs = listOf("Dialogue", "Plan", "Raisonnement", "Mémoire", "Preuves", "Réglages")
     fun submit() {
         val text = draft.trim(); if (text.isEmpty() || busy) return
         analysis = ReasoningController.assess(text)
-        turns += Turn("Utilisateur", text); store.saveTurns(turns); draft = ""; busy = true
+        val userTurn = Turn("Utilisateur", text)
+        turns += userTurn; store.appendTurn(userTurn); draft = ""; busy = true
         scope.launch {
             val answer = withContext(Dispatchers.IO) { runCatching { OpenAiClient.complete(endpoint, text) }.getOrElse { "Connexion modèle impossible : ${it.message}" } }
-            turns += Turn("Logos", answer); store.saveTurns(turns); busy = false
+            val modelTurn = Turn("Logos", answer)
+            turns += modelTurn; store.appendTurn(modelTurn); memoryRecords = store.loadMemoryRecords(); busy = false
         }
     }
     Scaffold(topBar = { TopAppBar(title = { Text("OP15 Logos") }, actions = { Text("mémoire locale", Modifier.padding(end = 16.dp), style = MaterialTheme.typography.labelSmall) }) }) { padding ->
@@ -160,7 +159,7 @@ private fun LogosApp(store: HarnessStore) {
                 0 -> ChatPanel(turns, draft, { draft = it }, busy, ::submit)
                 1 -> PlanPanel(analysis)
                 2 -> ReasoningPanel(analysis)
-                3 -> MemoryPanel(turns, { turns.clear(); store.clear() })
+                3 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); memoryRecords = store.loadMemoryRecords() }, { turns.clear(); store.clearTurns() })
                 4 -> EvidencePanel(analysis)
                 5 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
             }
@@ -190,12 +189,19 @@ private fun LogosApp(store: HarnessStore) {
     analysis.questions.forEach { Card { Text(it, Modifier.padding(12.dp)) } }
 }
 
-@Composable private fun MemoryPanel(turns: List<Turn>, clear: () -> Unit) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+@Composable private fun MemoryPanel(turns: List<Turn>, records: List<MemoryRecord>, addHypothesis: (String) -> Unit, clear: () -> Unit) {
+    var note by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Mémoire de conversation", style = MaterialTheme.typography.titleLarge)
-    Text("${turns.size} tours stockés localement. Un souvenir n'est pas une preuve.")
-    Button(onClick = clear, enabled = turns.isNotEmpty()) { Text("Effacer la mémoire locale") }
+    Text("${turns.size} échanges et ${records.size} éléments structurés stockés localement en SQLite. Un souvenir n'est pas une preuve.")
+    OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Hypothèse à conserver") })
+    Button(onClick = { if (note.isNotBlank()) { addHypothesis(note); note = "" } }, enabled = note.isNotBlank()) { Text("Enregistrer comme hypothèse") }
+    LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(records) { record -> Card { Column(Modifier.padding(10.dp)) { Text("${record.kind} · ${record.status}", style = MaterialTheme.typography.labelMedium); Text(record.content); Text("source : ${record.source}", style = MaterialTheme.typography.labelSmall) } } }
+    }
+    Button(onClick = clear, enabled = turns.isNotEmpty()) { Text("Effacer les échanges") }
+    }
 }
-
 @Composable private fun EvidencePanel(analysis: Analysis) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Preuves et vérification", style = MaterialTheme.typography.titleLarge)
     Text("Aucun oracle n'est encore connecté. Toute conclusion du modèle reste non vérifiée.")
