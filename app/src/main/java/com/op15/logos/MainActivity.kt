@@ -104,9 +104,13 @@ private class HarnessStore(context: Context) {
     private val prefs = context.getSharedPreferences("logos_harness", Context.MODE_PRIVATE)
     private val memory = LogosMemoryDb(context)
     fun endpoint(): String = prefs.getString("endpoint", "") ?: ""
+    fun activeSession(): Long = prefs.getLong("active_session", 1)
+    fun selectSession(id: Long) = prefs.edit().putLong("active_session", id).apply()
+    fun sessions(): List<SessionRecord> = memory.sessions()
+    fun createSession(title: String): Long = memory.createSession(title)
     fun setEndpoint(value: String) = prefs.edit().putString("endpoint", value.trim()).apply()
-    fun loadTurns(): List<Turn> = memory.turns()
-    fun appendTurn(turn: Turn) = memory.append("turn", turn.text, if (turn.role == "Utilisateur") "declared" else "unverified", turn.role)
+    fun loadTurns(): List<Turn> = memory.turns(activeSession())
+    fun appendTurn(turn: Turn) = memory.append("turn", turn.text, if (turn.role == "Utilisateur") "declared" else "unverified", turn.role, activeSession())
     fun loadMemoryRecords(): List<MemoryRecord> = memory.records()
     fun addHypothesis(text: String) = memory.append("hypothesis", text, "proposed", "Utilisateur")
     fun addEvidence(text: String, source: String) = memory.append("evidence", text, "unverified", source.ifBlank { "Utilisateur" })
@@ -143,6 +147,7 @@ private object OpenAiClient {
 private fun LogosApp(store: HarnessStore) {
     val scope = remember { CoroutineScope(Dispatchers.Main) }
     val turns = remember { mutableStateListOf<Turn>().also { it.addAll(store.loadTurns()) } }
+    var sessions by remember { mutableStateOf(store.sessions()) }
     var tab by remember { mutableIntStateOf(0) }
     var endpoint by remember { mutableStateOf(store.endpoint()) }
     var draft by remember { mutableStateOf("") }
@@ -160,7 +165,7 @@ private fun LogosApp(store: HarnessStore) {
         auditEvents = store.loadAuditEvents()
         auditReport = store.verifyAudit()
     }
-    val tabs = listOf("Dialogue", "Plan", "Raisonnement", "Mémoire", "Graphe", "Preuves", "Affirmations", "Audit", "Réglages")
+    val tabs = listOf("Dialogue", "Sessions", "Plan", "Raisonnement", "Mémoire", "Graphe", "Preuves", "Affirmations", "Audit", "Réglages")
     fun submit() {
         val text = draft.trim(); if (text.isEmpty() || busy) return
         analysis = ReasoningController.assess(text)
@@ -177,16 +182,28 @@ private fun LogosApp(store: HarnessStore) {
             TabRow(selectedTabIndex = tab) { tabs.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) } }
             when (tab) {
                 0 -> ChatPanel(turns, draft, { draft = it }, busy, ::submit)
-                1 -> PlanPanel(analysis)
-                2 -> ReasoningPanel(analysis)
-                3 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); refreshGovernance() }, { turns.clear(); store.clearTurns(); refreshGovernance() })
-                4 -> GraphPanel(memoryRecords, memoryLinks) { from, to, relation -> store.link(from, to, relation); refreshGovernance() }
-                5 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); refreshGovernance() }, { expression, value -> store.addCalculation(expression, value); refreshGovernance() })
-                6 -> ClaimPanel(memoryRecords, claims) { text, critical, evidenceIds -> store.addClaim(text, critical, evidenceIds); refreshGovernance() }
-                7 -> AuditPanel(auditEvents, auditReport, ::refreshGovernance)
-                8 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) }, { LlamaJni.probe().detail })
+                1 -> SessionPanel(sessions, store.activeSession(), { title -> store.createSession(title); sessions = store.sessions() }, { id -> store.selectSession(id); turns.clear(); turns.addAll(store.loadTurns()) })
+                2 -> PlanPanel(analysis)
+                3 -> ReasoningPanel(analysis)
+                4 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); refreshGovernance() }, { turns.clear(); store.clearTurns(); refreshGovernance() })
+                5 -> GraphPanel(memoryRecords, memoryLinks) { from, to, relation -> store.link(from, to, relation); refreshGovernance() }
+                6 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); refreshGovernance() }, { expression, value -> store.addCalculation(expression, value); refreshGovernance() })
+                7 -> ClaimPanel(memoryRecords, claims) { text, critical, evidenceIds -> store.addClaim(text, critical, evidenceIds); refreshGovernance() }
+                8 -> AuditPanel(auditEvents, auditReport, ::refreshGovernance)
+                9 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) }, { LlamaJni.probe().detail })
             }
         }
+    }
+}
+
+@Composable private fun SessionPanel(sessions: List<SessionRecord>, activeId: Long, create: (String) -> Unit, select: (Long) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Sessions", style = MaterialTheme.typography.titleLarge)
+        Text("Chaque session conserve son propre historique de dialogue. Les preuves et l’audit restent communs tant que leur isolation n’est pas achevée.")
+        OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("Nom de session") })
+        Button(onClick = { create(title); title = "" }, enabled = title.isNotBlank()) { Text("Créer") }
+        LazyColumn(Modifier.weight(1f)) { items(sessions) { session -> Card { Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(if (session.id == activeId) "● ${session.title}" else session.title); Button(onClick = { select(session.id) }, enabled = session.id != activeId) { Text("Ouvrir") } } } } }
     }
 }
 

@@ -23,8 +23,9 @@ data class MemoryLink(val id: Long, val fromId: Long, val toId: Long, val relati
 data class ClaimRecord(val id: Long, val text: String, val critical: Boolean, val status: String, val evidenceIds: List<Long>, val createdAt: Long)
 data class AuditEvent(val id: Long, val timestamp: Long, val action: String, val details: String, val previousHash: String, val eventHash: String)
 data class AuditReport(val valid: Boolean, val message: String)
+data class SessionRecord(val id: Long, val title: String, val state: String, val createdAt: Long, val updatedAt: Long)
 
-class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.db", null, 3) {
+class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.db", null, 4) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """CREATE TABLE memories (
@@ -33,20 +34,26 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
                 content TEXT NOT NULL,
                 status TEXT NOT NULL,
                 source TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                session_id INTEGER NOT NULL DEFAULT 1
             )"""
         )
         db.execSQL("CREATE INDEX memories_kind_time ON memories(kind, created_at DESC)")
         createRelations(db)
         createGovernance(db)
+        createSessions(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) createRelations(db)
         if (oldVersion < 3) createGovernance(db)
+        if (oldVersion < 4) {
+            createSessions(db)
+            db.execSQL("ALTER TABLE memories ADD COLUMN session_id INTEGER NOT NULL DEFAULT 1")
+        }
     }
 
-    fun append(kind: String, content: String, status: String, source: String): Long {
+    fun append(kind: String, content: String, status: String, source: String, sessionId: Long = 1): Long {
         require(kind in setOf("turn", "note", "hypothesis", "evidence", "experiment", "action"))
         require(status in setOf("declared", "unverified", "verified", "refuted", "proposed"))
         val id = writableDatabase.insertOrThrow(
@@ -57,16 +64,20 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
                 put("status", status)
                 put("source", source)
                 put("created_at", System.currentTimeMillis())
+                put("session_id", sessionId)
             }
         )
         appendAudit("memory.append", "kind=$kind;id=$id;status=$status")
         return id
     }
 
-    fun turns(limit: Int = 100): List<Turn> = query("kind = ?", arrayOf("turn"), limit)
+    fun turns(sessionId: Long = 1, limit: Int = 100): List<Turn> = query("kind = ? AND session_id = ?", arrayOf("turn", sessionId.toString()), limit)
         .asReversed().map { Turn(it.source, it.content, it.createdAt) }
 
     fun records(limit: Int = 100): List<MemoryRecord> = query("kind != ?", arrayOf("turn"), limit)
+
+    fun sessions(): List<SessionRecord> = readableDatabase.query("sessions", arrayOf("id", "title", "state", "created_at", "updated_at"), null, null, null, null, "updated_at DESC").use { c -> buildList { while (c.moveToNext()) add(SessionRecord(c.getLong(0), c.getString(1), c.getString(2), c.getLong(3), c.getLong(4))) } }
+    fun createSession(title: String): Long { val now = System.currentTimeMillis(); return writableDatabase.insertOrThrow("sessions", null, ContentValues().apply { put("title", title.trim().ifBlank { "Nouvelle session" }); put("state", "idle"); put("created_at", now); put("updated_at", now) }) }
 
     fun clearTurns() {
         val removed = writableDatabase.delete("memories", "kind = ?", arrayOf("turn"))
@@ -172,6 +183,11 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
         db.execSQL("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, critical INTEGER NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS claim_evidence (claim_id INTEGER NOT NULL, evidence_id INTEGER NOT NULL, UNIQUE(claim_id, evidence_id))")
         db.execSQL("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL, previous_hash TEXT NOT NULL, event_hash TEXT NOT NULL)")
+    }
+
+    private fun createSessions(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, state TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)")
+        db.execSQL("INSERT OR IGNORE INTO sessions (id, title, state, created_at, updated_at) VALUES (1, 'Accueil', 'idle', 0, 0)")
     }
 
     private fun appendAudit(action: String, rawDetails: String) {
