@@ -52,6 +52,15 @@ depuis un adaptateur PC/service ; seules les briques Kotlin/Android légères so
 | https://supadata.ai | API de transcriptions, métadonnées et analyse de vidéos sociales. | API hébergée, données externes et clé : pas de mémoire automatique. | Une transcription importée reste non vérifiée et cite URL + date + fournisseur. |
 | https://crawlee.dev | Documentation d'un framework de crawl. | Runtime et licence à vérifier par version avant réutilisation. | Référence PC ; aucun crawler embarqué dans l'APK. |
 
+## Lot C — mémoire et exécution Android, approfondi le 2026-10-12
+
+| Source | Chemin inspecté / rôle réel | Décision Logos | Test d'intégration requis |
+|---|---|---|---|
+| https://github.com/mem0ai/mem0 | README : mémoire utilisateur/session/agent, extraction et récupération hybrides ; dépôt Apache-2.0 mais piles Python/Node et service optionnel. | **data contract** : conserver origine, temps et statut ; pas de SDK ou clé Mem0 dans l'APK. | Persister puis retrouver une hypothèse locale sans réseau. |
+| https://github.com/getzep/graphiti | Dépôt de graphe de connaissances temps réel pour agents ; infrastructure de service, à évaluer avant toute synchronisation. | **reference only** : modèle futur de relations temporelles. | Benchmark de relations sur export SQLite avant un adaptateur. |
+| https://github.com/google-ai-edge/LiteRT-LM | Framework d'inférence LLM edge de Google. | **adapter** futur : un `ModelAdapter` local séparé du contrôleur. | Réponse locale avec métriques de latence et repli contrôlé. |
+| https://github.com/eibragaa/droid-harness | Harnais Android Snapdragon avec llama.cpp portable. | **reference only** : étudier son déploiement, sans reprendre ses permissions ni son runtime. | Démontrer un modèle local Logos sans accès système implicite. |
+
 ## File d'audit priorisée
 
 ### Logique, preuve et arguments

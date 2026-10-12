@@ -108,6 +108,7 @@ private class HarnessStore(context: Context) {
     fun appendTurn(turn: Turn) = memory.append("turn", turn.text, if (turn.role == "Utilisateur") "declared" else "unverified", turn.role)
     fun loadMemoryRecords(): List<MemoryRecord> = memory.records()
     fun addHypothesis(text: String) = memory.append("hypothesis", text, "proposed", "Utilisateur")
+    fun addEvidence(text: String, source: String) = memory.append("evidence", text, "unverified", source.ifBlank { "Utilisateur" })
     fun clearTurns() = memory.clearTurns()
 }
 
@@ -160,7 +161,7 @@ private fun LogosApp(store: HarnessStore) {
                 1 -> PlanPanel(analysis)
                 2 -> ReasoningPanel(analysis)
                 3 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); memoryRecords = store.loadMemoryRecords() }, { turns.clear(); store.clearTurns() })
-                4 -> EvidencePanel(analysis)
+                4 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); memoryRecords = store.loadMemoryRecords() })
                 5 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
             }
         }
@@ -202,11 +203,21 @@ private fun LogosApp(store: HarnessStore) {
     Button(onClick = clear, enabled = turns.isNotEmpty()) { Text("Effacer les échanges") }
     }
 }
-@Composable private fun EvidencePanel(analysis: Analysis) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+@Composable private fun EvidencePanel(analysis: Analysis, records: List<MemoryRecord>, addEvidence: (String, String) -> Unit) {
+    var statement by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Preuves et vérification", style = MaterialTheme.typography.titleLarge)
-    Text("Aucun oracle n'est encore connecté. Toute conclusion du modèle reste non vérifiée.")
+    Text("Ajoute une observation ou une source. Elle reste non vérifiée jusqu'à l'exécution d'un vérificateur indépendant.")
+    OutlinedTextField(value = statement, onValueChange = { statement = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Observation ou affirmation") })
+    OutlinedTextField(value = source, onValueChange = { source = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Source ou URL") })
+    Button(onClick = { if (statement.isNotBlank()) { addEvidence(statement, source); statement = ""; source = "" } }, enabled = statement.isNotBlank()) { Text("Conserver comme preuve non vérifiée") }
     Text("Dernier statut du contrôleur : ${analysis.status.name}")
+    LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(records.filter { it.kind == "evidence" }) { record -> Card { Column(Modifier.padding(10.dp)) { Text(record.status, style = MaterialTheme.typography.labelMedium); Text(record.content); Text("provenance : ${record.source}", style = MaterialTheme.typography.labelSmall) } } }
+    }
     Text("Prochaine intégration : calculateur déterministe, recherche sourcée et tests d'outils sous permission.")
+    }
 }
 
 @Composable private fun SettingsPanel(endpoint: String, setEndpoint: (String) -> Unit, save: () -> Unit) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
