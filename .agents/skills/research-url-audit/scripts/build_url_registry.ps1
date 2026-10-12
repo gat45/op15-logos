@@ -34,6 +34,11 @@ Get-ChildItem -LiteralPath $DocsDirectory -Filter *.md -File | ForEach-Object {
                     decision = if ($previous) { $previous.decision } else { "" }
                     notes = if ($previous) { $previous.notes } else { "" }
                     reviewed_on = if ($previous) { $previous.reviewed_on } else { "" }
+                    availability = if ($previous) { $previous.availability } else { "" }
+                    http_code = if ($previous) { $previous.http_code } else { "" }
+                    final_url = if ($previous) { $previous.final_url } else { "" }
+                    checked_on = if ($previous) { $previous.checked_on } else { "" }
+                    availability_note = if ($previous) { $previous.availability_note } else { "" }
                 }
             }
         }
