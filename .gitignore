@@ -1,0 +1,11 @@
+# Android / Gradle outputs
+.gradle/
+.kotlin/
+**/build/
+local.properties
+*.log
+
+# Read-only upstream clones used while auditing. Their findings, not their
+# complete histories, belong in this repository.
+vendor-audit/
+
