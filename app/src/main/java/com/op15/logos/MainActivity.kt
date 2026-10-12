@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.op15.toolkit.LlamaJni
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -183,7 +184,7 @@ private fun LogosApp(store: HarnessStore) {
                 5 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); refreshGovernance() }, { expression, value -> store.addCalculation(expression, value); refreshGovernance() })
                 6 -> ClaimPanel(memoryRecords, claims) { text, critical, evidenceIds -> store.addClaim(text, critical, evidenceIds); refreshGovernance() }
                 7 -> AuditPanel(auditEvents, auditReport, ::refreshGovernance)
-                8 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) })
+                8 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) }, { LlamaJni.probe().detail })
             }
         }
     }
@@ -310,9 +311,15 @@ private fun LogosApp(store: HarnessStore) {
 }
 }
 
-@Composable private fun SettingsPanel(endpoint: String, setEndpoint: (String) -> Unit, save: () -> Unit) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+@Composable private fun SettingsPanel(endpoint: String, setEndpoint: (String) -> Unit, save: () -> Unit, probeNative: () -> String) {
+    var nativeStatus by remember { mutableStateOf("Runtime natif non vérifié.") }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Réglages", style = MaterialTheme.typography.titleLarge)
     OutlinedTextField(value = endpoint, onValueChange = setEndpoint, modifier = Modifier.fillMaxWidth(), label = { Text("URL OpenAI compatible") }, placeholder = { Text("http://192.168.x.x:8080/v1/chat/completions") })
     Button(onClick = save) { Text("Enregistrer l’URL") }
+    Text("Runtime GGUF local", style = MaterialTheme.typography.titleMedium)
+    Text(nativeStatus, style = MaterialTheme.typography.bodySmall)
+    Button(onClick = { nativeStatus = probeNative() }) { Text("Vérifier le runtime natif") }
     Text("OP15 Logos ne lance pas de navigateur, terminal ni écriture de fichiers sans permission explicite.", style = MaterialTheme.typography.bodySmall)
+    }
 }

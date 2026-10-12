@@ -4,6 +4,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val logosNativeRuntimeDirs = providers.gradleProperty("logosNativeDirs").orNull
+    ?.split(';')?.map(String::trim)?.filter(String::isNotBlank).orEmpty()
+val prepareLogosNativeRuntime by tasks.registering(Copy::class) {
+    onlyIf { logosNativeRuntimeDirs.isNotEmpty() }
+    logosNativeRuntimeDirs.forEach { directory -> from(file(directory)) { include("*.so") } }
+    into(layout.buildDirectory.dir("generated/logosJniLibs/arm64-v8a"))
+}
+
 android {
     namespace = "com.op15.logos"
     compileSdk = 36
@@ -22,7 +30,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+
+    // Native GGUF runtime is opt-in: do not embed host-specific binaries in Git.
+    // A release builder supplies an audited arm64-v8a directory through
+    // -PlogosNativeDir=<directory>.
+    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/logosJniLibs"))
 }
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }
+    .configureEach { dependsOn(prepareLogosNativeRuntime) }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
