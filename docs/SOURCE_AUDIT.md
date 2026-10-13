@@ -10,6 +10,19 @@ conserve les statuts `known`, `opened`, `audited`, `experimented`, `integrated`
 et `rejected` : il interdit de transformer une URL collectée en intégration
 affirmée sans audit ni test.
 
+## Disponibilité réseau — contrôle du 2026-10-13
+
+Les **90 URLs actuellement présentes** dans le registre ont été contrôlées par
+requête HTTP, avec redirections limitées. Résultat : **88 accessibles**, une
+erreur HTTP et une source sans résolution DNS. Ce contrôle ne lit pas le
+contenu, ne vérifie ni licence ni compatibilité, et ne change donc aucun statut
+de décision dans le registre.
+
+| URL | Résultat | Décision de registre |
+|---|---|---|
+| https://github.com/allenai/ProofWriter | HTTP 404 | Conserver l'historique, retrouver une source active avant audit sémantique. |
+| https://trolleybench.com/ | DNS indisponible au contrôle | Conserver comme référence signalée ; ne pas l'utiliser comme dépendance ou preuve. |
+
 ## Règle de décision
 
 Pour chaque source : vérifier le propriétaire, la licence, le code réel, les

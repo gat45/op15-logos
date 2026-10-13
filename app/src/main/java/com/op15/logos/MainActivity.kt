@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -125,15 +127,21 @@ private class HarnessStore(context: Context) {
 }
 
 private object OpenAiClient {
-    fun complete(endpoint: String, prompt: String): String {
+    fun complete(endpoint: String, history: List<Turn>, prompt: String): String {
         require(endpoint.startsWith("http://") || endpoint.startsWith("https://")) { "Renseigne une URL http(s) complète." }
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"; connectTimeout = 12_000; readTimeout = 90_000
             setRequestProperty("Content-Type", "application/json"); doOutput = true
         }
-        val body = JSONObject().put("model", "local").put("stream", false).put("messages", JSONArray().put(
-            JSONObject().put("role", "system").put("content", "Tu es Logos. Réponds en français. Distingue faits, hypothèses et limites. N'affiche pas de raisonnement caché.")
-        ).put(JSONObject().put("role", "user").put("content", prompt))).toString()
+        val messages = JSONArray().put(
+            JSONObject().put("role", "system").put("content", "Tu es Logos, un assistant local francophone. Utilise l'historique récent fourni pour garder le fil de la discussion, sans prétendre que chaque souvenir est un fait vérifié. Distingue faits, hypothèses et limites. N'affiche pas de raisonnement caché.")
+        )
+        // Bounded context prevents a long session from silently overflowing the model context window.
+        history.takeLast(12).forEach { turn ->
+            messages.put(JSONObject().put("role", if (turn.role == "Utilisateur") "user" else "assistant").put("content", turn.text.take(2_000)))
+        }
+        messages.put(JSONObject().put("role", "user").put("content", prompt))
+        val body = JSONObject().put("model", "local").put("stream", false).put("messages", messages).toString()
         connection.outputStream.bufferedWriter().use { it.write(body) }
         val code = connection.responseCode
         val text = (if (code in 200..299) connection.inputStream else connection.errorStream).bufferedReader().use { it.readText() }
@@ -169,17 +177,18 @@ private fun LogosApp(store: HarnessStore) {
     fun submit() {
         val text = draft.trim(); if (text.isEmpty() || busy) return
         analysis = ReasoningController.assess(text)
+        val recentHistory = turns.toList()
         val userTurn = Turn("Utilisateur", text)
         turns += userTurn; store.appendTurn(userTurn); draft = ""; busy = true
         scope.launch {
-            val answer = withContext(Dispatchers.IO) { runCatching { OpenAiClient.complete(endpoint, text) }.getOrElse { "Connexion modèle impossible : ${it.message}" } }
+            val answer = withContext(Dispatchers.IO) { runCatching { OpenAiClient.complete(endpoint, recentHistory, text) }.getOrElse { "Connexion modèle impossible : ${it.message}" } }
             val modelTurn = Turn("Logos", answer)
             turns += modelTurn; store.appendTurn(modelTurn); refreshGovernance(); busy = false
         }
     }
     Scaffold(topBar = { TopAppBar(title = { Text("OP15 Logos") }, actions = { Text("mémoire locale", Modifier.padding(end = 16.dp), style = MaterialTheme.typography.labelSmall) }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = tab) { tabs.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) } }
+            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 12.dp) { tabs.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) } }
             when (tab) {
                 0 -> ChatPanel(turns, draft, { draft = it }, busy, ::submit)
                 1 -> SessionPanel(sessions, store.activeSession(), { title -> store.createSession(title); sessions = store.sessions() }, { id -> store.selectSession(id); turns.clear(); turns.addAll(store.loadTurns()) })
@@ -231,11 +240,17 @@ private fun LogosApp(store: HarnessStore) {
     analysis.objections.forEach { Card { Text(it, Modifier.padding(12.dp)) } }
 }
 
-@Composable private fun ChatPanel(turns: List<Turn>, draft: String, setDraft: (String) -> Unit, busy: Boolean, send: () -> Unit) = Column(Modifier.fillMaxSize().padding(12.dp)) {
-    Text("Le modèle est un adaptateur : configure son URL dans Réglages.", style = MaterialTheme.typography.labelSmall)
-    LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(turns) { turn -> Card { Column(Modifier.padding(10.dp)) { Text(turn.role, style = MaterialTheme.typography.labelMedium); Text(turn.text) } } } }
-    OutlinedTextField(value = draft, onValueChange = setDraft, modifier = Modifier.fillMaxWidth(), label = { Text("Message") }, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), singleLine = false)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { Button(onClick = send, enabled = !busy) { Text(if (busy) "Réponse…" else "Envoyer") } }
+@Composable private fun ChatPanel(turns: List<Turn>, draft: String, setDraft: (String) -> Unit, busy: Boolean, send: () -> Unit) = Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
+        Text("Logos", style = MaterialTheme.typography.titleMedium)
+        Text("Assistant local · mémoire et preuves séparées", style = MaterialTheme.typography.labelMedium)
+    } }
+    LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (turns.isEmpty()) item { Card { Column(Modifier.padding(16.dp)) { Text("Commencer une session", style = MaterialTheme.typography.titleMedium); Text("Décris un objectif. Logos distinguera ce qui est déclaré, inféré et vérifié.") } } }
+        items(turns) { turn -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(turn.role, style = MaterialTheme.typography.labelMedium); Text(turn.text) } } }
+    }
+    OutlinedTextField(value = draft, onValueChange = setDraft, modifier = Modifier.fillMaxWidth(), label = { Text("Écrire à Logos") }, placeholder = { Text("Pose une question ou donne un objectif…") }, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send), keyboardActions = KeyboardActions(onSend = { if (!busy && draft.isNotBlank()) send() }), singleLine = false)
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(if (busy) "Réponse en cours" else "Les 12 derniers messages sont transmis au modèle", style = MaterialTheme.typography.labelSmall); Button(onClick = send, enabled = !busy && draft.isNotBlank()) { Text(if (busy) "Réponse…" else "Envoyer") } }
 }
 
 @Composable private fun ReasoningPanel(analysis: Analysis) = Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
