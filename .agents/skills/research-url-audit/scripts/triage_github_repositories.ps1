@@ -7,6 +7,25 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path -LiteralPath $RegistryPath)) { throw "Registre introuvable : $RegistryPath" }
 
+# Preserve a successful previous collection if the anonymous GitHub API is
+# rate-limited. The cache is metadata, not a semantic audit result.
+$cached = @{}
+if (Test-Path -LiteralPath $OutputPath) {
+    Import-Csv -LiteralPath $OutputPath | ForEach-Object {
+        if ($_.triage_status -in @("metadata_collected", "metadata_cached")) { $cached[$_.url] = $_ }
+    }
+}
+try {
+    $repoRoot = (git rev-parse --show-toplevel 2>$null).Trim()
+    if ($repoRoot) {
+        $relativeOutput = [IO.Path]::GetRelativePath($repoRoot, (Resolve-Path -LiteralPath $OutputPath)) -replace '\\', '/'
+        $baseline = git -C $repoRoot show "HEAD:$relativeOutput" 2>$null | ConvertFrom-Csv
+        $baseline | ForEach-Object {
+            if ($_.triage_status -in @("metadata_collected", "metadata_cached") -and -not $cached.ContainsKey($_.url)) { $cached[$_.url] = $_ }
+        }
+    }
+} catch { }
+
 $repositories = Import-Csv -LiteralPath $RegistryPath | Where-Object {
     $_.domain -eq "github.com" -and $_.url -match '^https://github\.com/[^/]+/[^/#?]+/?$'
 } | Sort-Object url -Unique
@@ -33,10 +52,20 @@ $results = foreach ($row in $repositories) {
             error = ""
         }
     } catch {
-        [pscustomobject]@{
-            url = $row.url; repository = $repo; owner = ""; description = ""; license = ""; default_branch = "";
-            archived = ""; disabled = ""; pushed_at = ""; stars = ""; open_issues = "";
-            registry_status = $row.status; triage_status = "metadata_unavailable"; error = $_.Exception.Message.Replace("`r", " ").Replace("`n", " ").Substring(0, [Math]::Min(180, $_.Exception.Message.Length))
+        $message = $_.Exception.Message.Replace("`r", " ").Replace("`n", " ").Substring(0, [Math]::Min(180, $_.Exception.Message.Length))
+        if ($cached.ContainsKey($row.url)) {
+            $previous = $cached[$row.url]
+            [pscustomobject]@{
+                url = $row.url; repository = $previous.repository; owner = $previous.owner; description = $previous.description; license = $previous.license; default_branch = $previous.default_branch;
+                archived = $previous.archived; disabled = $previous.disabled; pushed_at = $previous.pushed_at; stars = $previous.stars; open_issues = $previous.open_issues;
+                registry_status = $row.status; triage_status = "metadata_cached"; error = "Dernier contrôle indisponible : $message"
+            }
+        } else {
+            [pscustomobject]@{
+                url = $row.url; repository = $repo; owner = ""; description = ""; license = ""; default_branch = "";
+                archived = ""; disabled = ""; pushed_at = ""; stars = ""; open_issues = "";
+                registry_status = $row.status; triage_status = "metadata_unavailable"; error = $message
+            }
         }
     }
     Start-Sleep -Milliseconds $PauseMilliseconds

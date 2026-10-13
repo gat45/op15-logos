@@ -12,8 +12,8 @@ affirmée sans audit ni test.
 
 ## Disponibilité réseau — contrôle du 2026-10-13
 
-Les **90 URLs actuellement présentes** dans le registre ont été contrôlées par
-requête HTTP, avec redirections limitées. Résultat : **88 accessibles**, une
+Les **101 URLs actuellement présentes** dans le registre ont été contrôlées par
+requête HTTP, avec redirections limitées. Résultat : **99 accessibles**, une
 erreur HTTP et une source sans résolution DNS. Ce contrôle ne lit pas le
 contenu, ne vérifie ni licence ni compatibilité, et ne change donc aucun statut
 de décision dans le registre.
@@ -181,9 +181,12 @@ doit jamais marquer une sortie LLM comme preuve sans résultat externe.
 ## Triage GitHub et lot Android — 2026-10-13
 
 Le script local `triage_github_repositories.ps1` a interrogé l'API publique
-pour les 44 URLs de dépôt identifiables dans le registre. Il a relevé les
-métadonnées de 43 dépôts ; `allenai/ProofWriter` n'est plus disponible à cette
-adresse. Le fichier machine lisible est [GITHUB_TRIAGE.csv](GITHUB_TRIAGE.csv).
+pour les 51 URLs de dépôt identifiables dans le registre (les URLs
+d'organisation ou de documentation ne sont pas des dépôts). Il conserve les
+métadonnées de 43 dépôts déjà collectées et marque 8 nouveaux dépôts comme
+non disponibles au triage quand l'API GitHub limite les requêtes.
+`allenai/ProofWriter` n'est plus disponible à cette adresse. Le fichier
+machine lisible est [GITHUB_TRIAGE.csv](GITHUB_TRIAGE.csv).
 Ce triage ne modifie pas le statut d'audit : il ne remplace ni l'inspection du
 code, ni les tests, ni l'examen des licences effectives.
 
@@ -197,6 +200,27 @@ code, ni les tests, ni l'examen des licences effectives.
 Les projets marqués `reference only` ne sont ni téléchargés ni exécutés dans
 Logos. Leur statut de registre reste `opened` jusqu'à l'inspection prévue par
 le skill.
+
+## Lot D — stack locale, voix et Android — 2026-10-13
+
+| Source | Rôle observé | Licence / contrainte | Décision Logos | Vérification requise |
+|---|---|---|---|---|
+| https://github.com/jaredrhod/fullstack-agent | Installateur Claude Code qui assemble mémoire, voix, visualisation et actions optionnelles. | AGPL-3.0 ; dépend de Claude Code et d'un abonnement, hors modèle Android local. | **reference only** : conserver la séparation optionnelle des capacités, ne pas reprendre le code ou l'installateur. | Aucun code tiers dans l'APK ; concevoir une fiche d'activation/permission par capacité. |
+| https://github.com/jaredrhod/ai-memory-vault | Mémoire persistante Markdown/Obsidian, templates et « priming » par tâche. | CC-BY-SA-4.0, conçu pour un agent de terminal et des fichiers Markdown. | **data contract** : futur export/import Markdown explicite depuis SQLite ; aucun template ou identité tierce distribué. | Exporter un souvenir Logos avec provenance, puis le réimporter sans perdre statut/date. |
+| https://github.com/jaredrhod/backtalk | Interface voix locale annoncée pour un agent de terminal. | Licence et dépendances audio à auditer avant toute réutilisation. | **reference only** : retenir le pipeline écoute → transcription → réponse → synthèse. | Prototype voix Android distinct, avec consentement micro et interruption testée. |
+| https://github.com/ggml-org/llama.cpp | Runtime local GGUF. | Licence et ABI à vérifier par version ; compilation NDK et bibliothèques natives nécessaires. | **adapter** : `LlamaJni` reste l'unique frontière native de Logos. | Charger un GGUF réel sur OP15, mesurer TTFT/tok/s et libérer la session après annulation. |
+| https://github.com/ggml-org/llama.cpp/blob/master/docs/android.md | Instructions Android publiques de llama.cpp. | Documentation, pas un artefact prêt à intégrer. | **reference only** pour le build NDK/Android de l'adaptateur. | Reproduire un build propre, sans chemins root ni fichiers système imposés. |
+| https://developer.android.com/ndk | Documentation officielle NDK. | Outil de compilation, pas runtime de modèle. | **reference only** ; source normative pour le build JNI. | CI de compilation `arm64-v8a` et test de chargement sur appareil. |
+| https://developer.android.com/reference/android/accessibilityservice/AccessibilityService | API Android puissante d'accessibilité. | Permission sensible ; politiques Play et consentement explicite requis. | **reject** pour l'automatisation générale. Une future aide d'accessibilité ne peut servir que son objectif déclaré et rester désactivée par défaut. | Revue de politique, écran de consentement et test manuel avant tout ajout. |
+| https://huggingface.co/ | Catalogue de modèles et jeux de données. | Chaque modèle possède ses propres licence, taille et conditions. | **reference only** : un modèle n'est sélectionnable qu'après fiche de licence et mesure locale. | Registre de modèles avec hash, licence, taille, backend et métriques. |
+| https://github.com/orailnoor/private-agent | Projet signalé pour agent privé local. | Code, licence et manifeste à ouvrir. | **reference only** tant que l'audit n'est pas fait. | Lire licence, stockage, permissions et tests. |
+| https://github.com/orailnoor/cross-platform-llm-client | Client LLM multiplateforme signalé. | Code, licence et architecture à ouvrir. | **reference only**. | Comparer sa frontière modèle à `ModelAdapter` sans dépendance directe. |
+| https://github.com/orailnoor/DroidDesk | Projet Android signalé. | Code, licence et permissions à ouvrir. | **reference only**. | Auditer manifeste et flux UI avant toute comparaison. |
+
+Les pages Android générales sur activités et architecture sont ajoutées au
+registre comme sources normatives de conception, mais n'entraînent pas de
+dépendance. Les fonctions d'accessibilité ne sont jamais considérées comme une
+autorisation de contrôler l'appareil.
 
 ## Prochaine passe mesurable
 
