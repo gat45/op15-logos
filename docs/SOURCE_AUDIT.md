@@ -178,6 +178,26 @@ UI Android
 Le modèle formule ; le contrôleur demande les vérifications ; un adaptateur ne
 doit jamais marquer une sortie LLM comme preuve sans résultat externe.
 
+## Triage GitHub et lot Android — 2026-10-13
+
+Le script local `triage_github_repositories.ps1` a interrogé l'API publique
+pour les 44 URLs de dépôt identifiables dans le registre. Il a relevé les
+métadonnées de 43 dépôts ; `allenai/ProofWriter` n'est plus disponible à cette
+adresse. Le fichier machine lisible est [GITHUB_TRIAGE.csv](GITHUB_TRIAGE.csv).
+Ce triage ne modifie pas le statut d'audit : il ne remplace ni l'inspection du
+code, ni les tests, ni l'examen des licences effectives.
+
+| Source | Ce qui a été ouvert | Contrainte vérifiée | Décision Logos | Étape d'acceptation |
+|---|---|---|---|---|
+| https://github.com/google/adk-kotlin | README, modules Android/LiteRT-LM et documentation d'agents/outils. | Apache-2.0 ; modules cloud et LiteRT-LM facultatifs. | **adapter à évaluer** : conserver l'interface `ModelAdapter`, ne pas remplacer JNI/llama.cpp sans mesure OP15. | Prototype isolé sans clé cloud, test de génération et mémoire sur appareil. |
+| https://github.com/tokenarc/open-jarvis | README public : agent Android local, voix et contrôle appareil annoncés. | MIT d'après le triage ; la surface de permissions doit être auditée avant toute réutilisation. | **reference only** à ce stade : étudier ses parcours de permission et non son code comme dépendance. | Lire manifeste, service d'accessibilité, tests et licence dans une passe dédiée. |
+| https://github.com/NickMonrad/kernel-ai-assistant | README public : assistant Android local-first, mémoire sémantique et framework de skills annoncés. | Apache-2.0 d'après le triage. | **reference only** : comparer son découpage mémoire/skills au contrat SQLite Logos. | Inspecter schéma, stockage, limites de permissions et tests. |
+| https://github.com/eibragaa/droid-harness | README public et audit existant : harnais de code Android autour d'un environnement local. | MIT ; cible un environnement de développement, pas une API Android embarquée. | **reference only** : utile pour le protocole de build/observabilité, pas pour embarquer un shell dans l'APK. | Reproduire seulement une mesure ou un test sans privilège. |
+
+Les projets marqués `reference only` ne sont ni téléchargés ni exécutés dans
+Logos. Leur statut de registre reste `opened` jusqu'à l'inspection prévue par
+le skill.
+
 ## Prochaine passe mesurable
 
 1. Auditer Jarvix Memory et le code OP15 avant d'ajouter une seconde mémoire.

@@ -29,6 +29,15 @@ portable data contract, a benchmark, or nothing at all.
 
 2. Read `docs/SOURCE_AUDIT.md` and `docs/CODE_COMPARISON.md` first. Preserve
    existing row statuses when refreshing the registry.
+   For every GitHub repository, collect reproducible public metadata before
+   allocating a semantic audit batch:
+
+   ```powershell
+   pwsh -File .agents/skills/research-url-audit/scripts/triage_github_repositories.ps1
+   ```
+
+   This writes `docs/GITHUB_TRIAGE.csv` and **does not change** the audit
+   status. Metadata is evidence for prioritisation, not proof that code was read.
 3. Work one thematic batch at a time. For a repository, inspect licence,
    dependency manifest, public interfaces, one representative implementation
    path and tests. For a paper, inspect the abstract, method, evaluation
