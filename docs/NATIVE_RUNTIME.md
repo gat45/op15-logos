@@ -62,6 +62,22 @@ L’interface doit donc afficher `backend demandé`, `backend réellement actif`
 `modèle`, `pré-remplissage`, `décodage`, `RAM` et `motif de repli`. Sans ces
 données, elle affiche « non mesuré » plutôt qu’un chiffre ou un HTP fictif.
 
+## Préparation locale contrôlée
+
+Le script `tools/prepare-jz-runtime.ps1` refuse un répertoire JZ incomplet,
+calcule les SHA-256 des bibliothèques et imprime la commande de build. Exemple
+sur la machine de développement :
+
+```powershell
+pwsh tools/prepare-jz-runtime.ps1 `
+  -JzRuntimeDir E:\oneplus\ggml-hexagon\out\ggmlhexagon-android\bin `
+  -JniDir E:\oneplus\binding_jni
+```
+
+Il ne copie aucune bibliothèque dans Git et ne déclare pas l'HTP fonctionnel.
+Le résultat est un inventaire de build ; la preuve de compatibilité reste le
+chargement JNI puis une génération et une mesure réelles sur l'OP15.
+
 Le code JNI existant a déjà corrigé des fuites de contexte/batch, mais son
 état est process-global : Logos devra sérialiser toute session native et ne
 pas proposer de génération concurrente avant cette validation.
