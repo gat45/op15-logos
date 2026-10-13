@@ -1,0 +1,9 @@
+id,feature,priority,status,evidence,next_acceptance
+F-01,Session de dialogue persistante,must,partial,SQLite session_id et écran Sessions,Créer deux sessions et prouver deux historiques distincts sur appareil
+F-02,Runtime GGUF local,must,partial,Bridge JNI et packaging arm64-v8a,Charger un GGUF sur OP15 et afficher backend réellement utilisé
+F-03,Génération en flux et annulation,must,planned,Aucune,Premier token puis annulation sans fuite native
+F-04,Mémoire avec provenance,must,partial,SQLite memory claims audit,Isoler les éléments par session et ajouter une source vérifiée
+F-05,Permissions d'outils,must,planned,Aucun,Refuser puis approuver une action non destructive avec journal
+F-06,Interface Android vérifiée,should,planned,Aucune,Capture appareil de tous les écrans et parcours du flux critique
+F-07,Voix locale,should,planned,Aucune,ASR plus TTS hors ligne et interruption mesurée
+F-08,MCP et RAG,could,planned,Aucun,Outil déclaré, permissionné et traçable
