@@ -1,6 +1,6 @@
 ---
 name: logos-replica
-description: Audit and evolve OP15 Logos through a clean-room product cycle: recon, architecture, design, build, visual test, and parity tracking. Use for multi-screen application work; do not use to copy another app's code, assets, text, or private behavior.
+description: "Audit and evolve OP15 Logos through a clean-room product cycle: recon, architecture, design, build, visual test, and parity tracking. Use for multi-screen application work; do not use to copy another app's code, assets, text, or private behavior."
 ---
 
 # Logos replica cycle
