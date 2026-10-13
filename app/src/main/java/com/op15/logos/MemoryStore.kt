@@ -25,7 +25,7 @@ data class AuditEvent(val id: Long, val timestamp: Long, val action: String, val
 data class AuditReport(val valid: Boolean, val message: String)
 data class SessionRecord(val id: Long, val title: String, val state: String, val createdAt: Long, val updatedAt: Long)
 
-class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.db", null, 4) {
+class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.db", null, 5) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """CREATE TABLE memories (
@@ -51,6 +51,10 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
             createSessions(db)
             db.execSQL("ALTER TABLE memories ADD COLUMN session_id INTEGER NOT NULL DEFAULT 1")
         }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE memory_relations ADD COLUMN session_id INTEGER NOT NULL DEFAULT 1")
+            db.execSQL("ALTER TABLE claims ADD COLUMN session_id INTEGER NOT NULL DEFAULT 1")
+        }
     }
 
     fun append(kind: String, content: String, status: String, source: String, sessionId: Long = 1): Long {
@@ -74,53 +78,53 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
     fun turns(sessionId: Long = 1, limit: Int = 100): List<Turn> = query("kind = ? AND session_id = ?", arrayOf("turn", sessionId.toString()), limit)
         .asReversed().map { Turn(it.source, it.content, it.createdAt) }
 
-    fun records(limit: Int = 100): List<MemoryRecord> = query("kind != ?", arrayOf("turn"), limit)
+    fun records(sessionId: Long = 1, limit: Int = 100): List<MemoryRecord> = query("kind != ? AND session_id = ?", arrayOf("turn", sessionId.toString()), limit)
 
     fun sessions(): List<SessionRecord> = readableDatabase.query("sessions", arrayOf("id", "title", "state", "created_at", "updated_at"), null, null, null, null, "updated_at DESC").use { c -> buildList { while (c.moveToNext()) add(SessionRecord(c.getLong(0), c.getString(1), c.getString(2), c.getLong(3), c.getLong(4))) } }
     fun createSession(title: String): Long { val now = System.currentTimeMillis(); return writableDatabase.insertOrThrow("sessions", null, ContentValues().apply { put("title", title.trim().ifBlank { "Nouvelle session" }); put("state", "idle"); put("created_at", now); put("updated_at", now) }) }
 
-    fun clearTurns() {
-        val removed = writableDatabase.delete("memories", "kind = ?", arrayOf("turn"))
-        appendAudit("memory.clear_turns", "count=$removed")
+    fun clearTurns(sessionId: Long = 1) {
+        val removed = writableDatabase.delete("memories", "kind = ? AND session_id = ?", arrayOf("turn", sessionId.toString()))
+        appendAudit("memory.clear_turns", "session=$sessionId;count=$removed")
     }
 
-    fun link(fromId: Long, toId: Long, relation: String): Long {
+    fun link(fromId: Long, toId: Long, relation: String, sessionId: Long = 1): Long {
         require(fromId > 0 && toId > 0 && fromId != toId)
         require(relation in setOf("supporte", "contredit", "depend_de"))
-        require(memoryExists(fromId) && memoryExists(toId)) { "Les deux éléments de mémoire doivent exister." }
+        require(memoryExists(fromId, sessionId) && memoryExists(toId, sessionId)) { "Les deux éléments de mémoire doivent appartenir à cette session." }
         val id = writableDatabase.insertOrThrow("memory_relations", null, ContentValues().apply {
-            put("from_id", fromId); put("to_id", toId); put("relation", relation); put("created_at", System.currentTimeMillis())
+            put("from_id", fromId); put("to_id", toId); put("relation", relation); put("session_id", sessionId); put("created_at", System.currentTimeMillis())
         })
-        appendAudit("memory.link", "id=$id;from=$fromId;to=$toId;relation=$relation")
+        appendAudit("memory.link", "id=$id;session=$sessionId;from=$fromId;to=$toId;relation=$relation")
         return id
     }
 
-    fun links(limit: Int = 100): List<MemoryLink> = readableDatabase.query(
+    fun links(sessionId: Long = 1, limit: Int = 100): List<MemoryLink> = readableDatabase.query(
         "memory_relations", arrayOf("id", "from_id", "to_id", "relation", "created_at"),
-        null, null, null, null, "created_at DESC", limit.toString()
+        "session_id = ?", arrayOf(sessionId.toString()), null, null, "created_at DESC", limit.toString()
     ).use { cursor -> buildList { while (cursor.moveToNext()) add(MemoryLink(cursor.getLong(0), cursor.getLong(1), cursor.getLong(2), cursor.getString(3), cursor.getLong(4))) } }
 
-    fun addClaim(text: String, critical: Boolean, evidenceIds: List<Long>): Long {
+    fun addClaim(text: String, critical: Boolean, evidenceIds: List<Long>, sessionId: Long = 1): Long {
         val distinctEvidence = evidenceIds.distinct()
         require(text.isNotBlank()) { "Claim vide." }
         require(!critical || distinctEvidence.isNotEmpty()) { "Une claim critique exige au moins une preuve liée." }
         distinctEvidence.forEach { id ->
-            readableDatabase.query("memories", arrayOf("kind"), "id = ?", arrayOf(id.toString()), null, null, null).use {
+            readableDatabase.query("memories", arrayOf("kind"), "id = ? AND session_id = ?", arrayOf(id.toString(), sessionId.toString()), null, null, null).use {
                 require(it.moveToFirst() && it.getString(0) == "evidence") { "Preuve introuvable : #$id" }
             }
         }
         val now = System.currentTimeMillis()
         val claimId = writableDatabase.insertOrThrow("claims", null, ContentValues().apply {
             put("text", text.trim()); put("critical", if (critical) 1 else 0)
-            put("status", if (distinctEvidence.isEmpty()) "unverified" else "linked_evidence"); put("created_at", now)
+            put("status", if (distinctEvidence.isEmpty()) "unverified" else "linked_evidence"); put("created_at", now); put("session_id", sessionId)
         })
         distinctEvidence.forEach { evidenceId -> writableDatabase.insertOrThrow("claim_evidence", null, ContentValues().apply { put("claim_id", claimId); put("evidence_id", evidenceId) }) }
-        appendAudit("claim.add", "id=$claimId;critical=$critical;evidence=${distinctEvidence.joinToString(",")}")
+        appendAudit("claim.add", "id=$claimId;session=$sessionId;critical=$critical;evidence=${distinctEvidence.joinToString(",")}")
         return claimId
     }
 
-    fun claims(limit: Int = 100): List<ClaimRecord> = readableDatabase.query(
-        "claims", arrayOf("id", "text", "critical", "status", "created_at"), null, null, null, null, "created_at DESC", limit.toString()
+    fun claims(sessionId: Long = 1, limit: Int = 100): List<ClaimRecord> = readableDatabase.query(
+        "claims", arrayOf("id", "text", "critical", "status", "created_at"), "session_id = ?", arrayOf(sessionId.toString()), null, null, "created_at DESC", limit.toString()
     ).use { cursor -> buildList { while (cursor.moveToNext()) {
         val claimId = cursor.getLong(0)
         val evidence = readableDatabase.query("claim_evidence", arrayOf("evidence_id"), "claim_id = ?", arrayOf(claimId.toString()), null, null, null).use { join -> buildList { while (join.moveToNext()) add(join.getLong(0)) } }
@@ -169,18 +173,19 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
                 from_id INTEGER NOT NULL,
                 to_id INTEGER NOT NULL,
                 relation TEXT NOT NULL,
+                session_id INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL,
-                UNIQUE(from_id, to_id, relation)
+                UNIQUE(session_id, from_id, to_id, relation)
             )"""
         )
     }
 
-    private fun memoryExists(id: Long): Boolean = readableDatabase.query(
-        "memories", arrayOf("id"), "id = ?", arrayOf(id.toString()), null, null, null, "1"
+    private fun memoryExists(id: Long, sessionId: Long): Boolean = readableDatabase.query(
+        "memories", arrayOf("id"), "id = ? AND session_id = ?", arrayOf(id.toString(), sessionId.toString()), null, null, null, "1"
     ).use { it.moveToFirst() }
 
     private fun createGovernance(db: SQLiteDatabase) {
-        db.execSQL("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, critical INTEGER NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS claims (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, critical INTEGER NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, session_id INTEGER NOT NULL DEFAULT 1)")
         db.execSQL("CREATE TABLE IF NOT EXISTS claim_evidence (claim_id INTEGER NOT NULL, evidence_id INTEGER NOT NULL, UNIQUE(claim_id, evidence_id))")
         db.execSQL("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL, previous_hash TEXT NOT NULL, event_hash TEXT NOT NULL)")
     }

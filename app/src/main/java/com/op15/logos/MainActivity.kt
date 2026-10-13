@@ -112,17 +112,17 @@ private class HarnessStore(context: Context) {
     fun setEndpoint(value: String) = prefs.edit().putString("endpoint", value.trim()).apply()
     fun loadTurns(): List<Turn> = memory.turns(activeSession())
     fun appendTurn(turn: Turn) = memory.append("turn", turn.text, if (turn.role == "Utilisateur") "declared" else "unverified", turn.role, activeSession())
-    fun loadMemoryRecords(): List<MemoryRecord> = memory.records()
-    fun addHypothesis(text: String) = memory.append("hypothesis", text, "proposed", "Utilisateur")
-    fun addEvidence(text: String, source: String) = memory.append("evidence", text, "unverified", source.ifBlank { "Utilisateur" })
-    fun addCalculation(expression: String, value: Double) = memory.append("evidence", "Calcul vérifié : $expression = $value", "verified", "calculator")
-    fun loadLinks(): List<MemoryLink> = memory.links()
-    fun link(fromId: Long, toId: Long, relation: String) = memory.link(fromId, toId, relation)
-    fun addClaim(text: String, critical: Boolean, evidenceIds: List<Long>) = memory.addClaim(text, critical, evidenceIds)
-    fun loadClaims(): List<ClaimRecord> = memory.claims()
+    fun loadMemoryRecords(): List<MemoryRecord> = memory.records(activeSession())
+    fun addHypothesis(text: String) = memory.append("hypothesis", text, "proposed", "Utilisateur", activeSession())
+    fun addEvidence(text: String, source: String) = memory.append("evidence", text, "unverified", source.ifBlank { "Utilisateur" }, activeSession())
+    fun addCalculation(expression: String, value: Double) = memory.append("evidence", "Calcul vérifié : $expression = $value", "verified", "calculator", activeSession())
+    fun loadLinks(): List<MemoryLink> = memory.links(activeSession())
+    fun link(fromId: Long, toId: Long, relation: String) = memory.link(fromId, toId, relation, activeSession())
+    fun addClaim(text: String, critical: Boolean, evidenceIds: List<Long>) = memory.addClaim(text, critical, evidenceIds, activeSession())
+    fun loadClaims(): List<ClaimRecord> = memory.claims(activeSession())
     fun loadAuditEvents(): List<AuditEvent> = memory.auditEvents()
     fun verifyAudit(): AuditReport = memory.verifyAudit()
-    fun clearTurns() = memory.clearTurns()
+    fun clearTurns() = memory.clearTurns(activeSession())
 }
 
 private object OpenAiClient {
@@ -208,7 +208,7 @@ private fun LogosApp(store: HarnessStore) {
         Column(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
                 0 -> ChatPanel(turns, draft, { draft = it }, busy, ::submit)
-                1 -> SessionPanel(sessions, store.activeSession(), { title -> store.createSession(title); sessions = store.sessions() }, { id -> store.selectSession(id); turns.clear(); turns.addAll(store.loadTurns()) })
+                1 -> SessionPanel(sessions, store.activeSession(), { title -> store.createSession(title); sessions = store.sessions() }, { id -> store.selectSession(id); turns.clear(); turns.addAll(store.loadTurns()); refreshGovernance() })
                 2 -> PlanPanel(analysis)
                 3 -> ReasoningPanel(analysis)
                 4 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); refreshGovernance() }, { turns.clear(); store.clearTurns(); refreshGovernance() })

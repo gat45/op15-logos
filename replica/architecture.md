@@ -36,8 +36,9 @@ Harnais afin de ne pas imposer une barre de dix onglets sur téléphone.
 
 - Les 12 derniers tours de la session sont injectés dans la requête modèle ;
   cette mémoire de contexte est bornée.
-- Les éléments de mémoire, les preuves et l'audit sont encore globaux entre
-  sessions : isolation à terminer avant de présenter plusieurs profils.
+- Les tours, éléments de mémoire, preuves, liens et affirmations sont isolés
+  par session. La chaîne d'audit reste globale par conception : elle décrit
+  l'historique local de l'application, pas la mémoire d'un profil.
 - Une URL ou un lien de mémoire est une provenance déclarée, jamais une
   preuve vérifiée sans contrôleur dédié.
 
