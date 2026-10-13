@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +39,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
@@ -122,6 +125,7 @@ private class HarnessStore(context: Context) {
     fun loadClaims(): List<ClaimRecord> = memory.claims(activeSession())
     fun loadAuditEvents(): List<AuditEvent> = memory.auditEvents()
     fun verifyAudit(): AuditReport = memory.verifyAudit()
+    fun exportSessionMarkdown(sessionId: Long = activeSession()): String = memory.exportSessionMarkdown(sessionId)
     fun clearTurns() = memory.clearTurns(activeSession())
 }
 
@@ -152,6 +156,7 @@ private object OpenAiClient {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LogosApp(store: HarnessStore) {
+    val context = LocalContext.current
     val scope = remember { CoroutineScope(Dispatchers.Main) }
     val turns = remember { mutableStateListOf<Turn>().also { it.addAll(store.loadTurns()) } }
     var sessions by remember { mutableStateOf(store.sessions()) }
@@ -165,6 +170,11 @@ private fun LogosApp(store: HarnessStore) {
     var claims by remember { mutableStateOf(store.loadClaims()) }
     var auditEvents by remember { mutableStateOf(store.loadAuditEvents()) }
     var auditReport by remember { mutableStateOf(store.verifyAudit()) }
+    var pendingMarkdown by remember { mutableStateOf("") }
+    val markdownExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+        if (uri != null && pendingMarkdown.isNotEmpty()) context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(pendingMarkdown) }
+        pendingMarkdown = ""
+    }
     fun refreshGovernance() {
         memoryRecords = store.loadMemoryRecords()
         memoryLinks = store.loadLinks()
@@ -211,7 +221,7 @@ private fun LogosApp(store: HarnessStore) {
                 1 -> SessionPanel(sessions, store.activeSession(), { title -> store.createSession(title); sessions = store.sessions() }, { id -> store.selectSession(id); turns.clear(); turns.addAll(store.loadTurns()); refreshGovernance() })
                 2 -> PlanPanel(analysis)
                 3 -> ReasoningPanel(analysis)
-                4 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); refreshGovernance() }, { turns.clear(); store.clearTurns(); refreshGovernance() })
+                4 -> MemoryPanel(turns, memoryRecords, { text -> store.addHypothesis(text); refreshGovernance() }, { turns.clear(); store.clearTurns(); refreshGovernance() }, { pendingMarkdown = store.exportSessionMarkdown(store.activeSession()); markdownExporter.launch("logos-session-${store.activeSession()}.md") })
                 5 -> GraphPanel(memoryRecords, memoryLinks) { from, to, relation -> store.link(from, to, relation); refreshGovernance() }
                 6 -> EvidencePanel(analysis, memoryRecords, { text, source -> store.addEvidence(text, source); refreshGovernance() }, { expression, value -> store.addCalculation(expression, value); refreshGovernance() })
                 7 -> ClaimPanel(memoryRecords, claims) { text, critical, evidenceIds -> store.addClaim(text, critical, evidenceIds); refreshGovernance() }
@@ -306,7 +316,7 @@ private fun HarnessHub(open: (Int) -> Unit) = Column(
     analysis.questions.forEach { Card { Text(it, Modifier.padding(12.dp)) } }
 }
 
-@Composable private fun MemoryPanel(turns: List<Turn>, records: List<MemoryRecord>, addHypothesis: (String) -> Unit, clear: () -> Unit) {
+@Composable private fun MemoryPanel(turns: List<Turn>, records: List<MemoryRecord>, addHypothesis: (String) -> Unit, clear: () -> Unit, export: () -> Unit) {
     var note by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Text("Mémoire de conversation", style = MaterialTheme.typography.titleLarge)
@@ -317,6 +327,7 @@ private fun HarnessHub(open: (Int) -> Unit) = Column(
         items(records) { record -> Card { Column(Modifier.padding(10.dp)) { Text("${record.kind} · ${record.status}", style = MaterialTheme.typography.labelMedium); Text(record.content); Text("source : ${record.source}", style = MaterialTheme.typography.labelSmall) } } }
     }
     Button(onClick = clear, enabled = turns.isNotEmpty()) { Text("Effacer les échanges") }
+    Button(onClick = export) { Text("Exporter la session .md") }
     }
 }
 @Composable private fun EvidencePanel(analysis: Analysis, records: List<MemoryRecord>, addEvidence: (String, String) -> Unit, addCalculation: (String, Double) -> Unit) {

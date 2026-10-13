@@ -135,6 +135,21 @@ class LogosMemoryDb(context: Context) : SQLiteOpenHelper(context, "logos_memory.
         "audit_events", arrayOf("id", "timestamp", "action", "details", "previous_hash", "event_hash"), null, null, null, null, "id DESC", limit.toString()
     ).use { cursor -> buildList { while (cursor.moveToNext()) add(AuditEvent(cursor.getLong(0), cursor.getLong(1), cursor.getString(2), cursor.getString(3), cursor.getString(4), cursor.getString(5))) } }
 
+    /** Portable local interchange; status and provenance are kept with each record. */
+    fun exportSessionMarkdown(sessionId: Long = 1): String = buildString {
+        appendLine("# ${sessions().firstOrNull { it.id == sessionId }?.title ?: "Session Logos"}")
+        appendLine("\n- session: $sessionId\n- generated_at: ${System.currentTimeMillis()}\n")
+        appendLine("## Records")
+        records(sessionId, 500).asReversed().forEach { record ->
+            appendLine("### ${record.kind} · ${record.status}")
+            appendLine("source: ${record.source} · id: ${record.id} · time: ${record.createdAt}\n")
+            appendLine(record.content + "\n")
+        }
+        appendLine("## Claims")
+        claims(sessionId, 500).asReversed().forEach { claim -> appendLine("- [${claim.status}] ${claim.text} (claim ${claim.id}; evidence ${claim.evidenceIds.joinToString()})") }
+        appendLine("\nUnverified records are claims, not established facts.")
+    }
+
     fun verifyAudit(): AuditReport {
         var previous = "GENESIS"
         readableDatabase.query("audit_events", arrayOf("timestamp", "action", "details", "previous_hash", "event_hash"), null, null, null, null, "id ASC").use { cursor ->
