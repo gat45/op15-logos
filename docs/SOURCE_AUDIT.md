@@ -222,6 +222,29 @@ registre comme sources normatives de conception, mais n'entraînent pas de
 dépendance. Les fonctions d'accessibilité ne sont jamais considérées comme une
 autorisation de contrôler l'appareil.
 
+### Pages Android officielles complémentaires
+
+- https://developer.android.com/
+- https://developer.android.com/guide/components/activities/intro-activities
+
+## Lot E — lecture de code des sources locales Android — 2026-10-13
+
+Les dépôts ci-dessous ont été clonés avec une profondeur de 1 dans
+`vendor-audit/`, dossier ignoré de Git. Aucun de leurs scripts n'a été lancé.
+
+| Source | Fonction réelle, entrée/sortie et chemin inspecté | Limites | Décision et test Logos |
+|---|---|---|---|
+| https://github.com/jaredrhod/fullstack-agent | Installateur qui assemble quatre outils externes ; `README.md` décrit mémoire, voix, visualisation et actions comme composants sélectionnables. Le dépôt racine contient surtout scripts d'installation et documentation. | `LICENSE` = AGPL-3.0 ; dépend de Claude Code, hors cible Android locale. | **reference only** : reprendre le principe de capacités activables séparément. Test : afficher une fiche de capacité avec état, permission et repli, sans installer d'outil. |
+| https://github.com/jaredrhod/ai-memory-vault | `README.md` et `ai-memory-vault.md` organisent un vault Obsidian/Markdown et un priming par tâche ; entrées/sorties = notes Markdown. | `LICENSE` = CC-BY-SA-4.0 ; templates et identité tiers non redistribués ; pas de moteur Android. | **data contract** : exporter une mémoire Logos en Markdown avec id, statut, source et date. Test : export puis import local sans perte de provenance. |
+| https://github.com/jaredrhod/backtalk | `pyproject.toml` dépend de Python 3.11, Claude Agent SDK, faster-whisper, Kokoro et audio local ; `backtalk/main.py` pilote micro fermé/ouvert et interruption vocale. | `LICENSE` = AGPL-3.0 ; Python/Claude Code, microphone et modèles séparés. | **reference only** : spécifier plus tard le cycle Android consentement micro → STT → réponse → TTS → interruption. Test : un PTT local qui ne conserve aucun audio brut. |
+| https://github.com/ggml-org/llama.cpp | `docs/android.md` et `examples/llama.android`: lecture des métadonnées GGUF, `InferenceEngine.loadModel`, `sendUserPrompt(): Flow<String>`, benchmark et `cleanUp`; tests unité/instrumentation présents. | `LICENSE` = MIT ; l'ABI, le modèle, la RAM et le backend doivent être testés sur OP15. | **adapter** : faire évoluer `LlamaJni` vers le contrat Logos `load → stream → cancel → unload`. Test : choisir un GGUF via URI, flux visible, annulation, puis mémoire native libérée. |
+| https://github.com/orailnoor/private-agent | `pubspec.yaml` = Flutter, HTTP, STT/TTS, intents, contacts, Shizuku et overlay ; `action_handler.dart` exécute ouverture d'app, SMS, ADB/Shizuku et automatisation d'écran. | Aucune `LICENSE` au clone ; permissions et actions à risque élevé. | **reject** : pas de reprise ni d'exécution. Un futur outil Logos doit avoir schéma d’arguments, risque, approbation et journal avant exécution. |
+| https://github.com/orailnoor/cross-platform-llm-client | `pubspec.yaml` = Flutter avec runtime llama et LiteRT ; `inference_android.dart` sélectionne runtime, vérifie RAM/GPU et libère un modèle obsolète ; `cloud_service.dart` gère flux SSE, délai et annulation ; tests correspondants présents. | `LICENSE` = MIT, mais code Flutter et plugins locaux non compatibles directement avec Kotlin/Compose. | **data contract** : reprendre l'état de cycle de vie et métriques, pas le code. Test : un faux adaptateur produit `Loading/Ready/Generating/Cancelled/Error` et le chat réagit à chaque état. |
+| https://github.com/orailnoor/DroidDesk | `app/lib/state/app_state.dart` et `platform_bridge.dart` installent un environnement Linux et exécutent des commandes ; gestion root/chroot/terminal visible. | `LICENSE` = GPL-3.0 ; surface root, chroot et shell incompatible avec le périmètre sûr de Logos. | **reject** : ne jamais intégrer shell/root/chroot. Test : l'UI Logos affirme qu'aucun outil système n'est disponible plutôt que de simuler son exécution. |
+| https://developer.android.com/guide/components/activities/intro-activities | Référence officielle du cycle de vie Android. | Documentation uniquement. | **reference only** : vérifier que chargement/annulation de modèle sont interrompus ou sauvegardés au cycle de vie. |
+| https://developer.android.com/ndk | Référence officielle du NDK et de la frontière native. | Documentation uniquement ; ABI et librairies doivent correspondre. | **reference only** : build `arm64-v8a` reproductible avant test JNI. |
+| https://huggingface.co/ | Catalogue de modèles/datasets. | Licence, modèle, quantification et politique changent par artefact. | **reference only** : registre de modèle local obligatoire avant téléchargement ou sélection. |
+
 ## Prochaine passe mesurable
 
 1. Auditer Jarvix Memory et le code OP15 avant d'ajouter une seconde mémoire.
