@@ -6,12 +6,13 @@ Date : 2026-10-13
 
 | Écran | État réel | Preuve / limite |
 |---|---|---|
-| Dialogue | Partiel | Envoie vers une URL OpenAI-compatible avec les 12 derniers tours de la session ; pas de streaming ni annulation. |
+| Chat | Partiel | Écran principal ; envoie vers une URL OpenAI-compatible avec les 12 derniers tours de la session ; pas de streaming ni annulation. |
 | Sessions | Partiel | Création/sélection SQLite et historique de dialogue isolé. Preuves, graphe et audit restent communs. |
 | Plan / raisonnement | Partiel | Lentilles déterministes locales ; pas de plan exécutable. |
 | Mémoire / graphe / preuves | Partiel | SQLite, relations, calculateur et provenance déclarée ; pas de RAG ni source web vérifiée. |
 | Affirmations / audit | Partiel | Lien affirmation-preuve et chaîne locale SHA-256 ; pas de signature matérielle. |
 | Réglages | Partiel | URL modèle et probe JNI ; import GGUF et profils runtime absents. |
+| Harnais | Partiel | Hub des écrans avancés pour conserver une navigation mobile lisible. |
 
 ## Fonctions critiques
 

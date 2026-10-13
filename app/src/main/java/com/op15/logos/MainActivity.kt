@@ -26,9 +26,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -173,7 +172,6 @@ private fun LogosApp(store: HarnessStore) {
         auditEvents = store.loadAuditEvents()
         auditReport = store.verifyAudit()
     }
-    val tabs = listOf("Dialogue", "Sessions", "Plan", "Raisonnement", "Mémoire", "Graphe", "Preuves", "Affirmations", "Audit", "Réglages")
     fun submit() {
         val text = draft.trim(); if (text.isEmpty() || busy) return
         analysis = ReasoningController.assess(text)
@@ -186,9 +184,28 @@ private fun LogosApp(store: HarnessStore) {
             turns += modelTurn; store.appendTurn(modelTurn); refreshGovernance(); busy = false
         }
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("OP15 Logos") }, actions = { Text("mémoire locale", Modifier.padding(end = 16.dp), style = MaterialTheme.typography.labelSmall) }) }) { padding ->
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("OP15 Logos") }, actions = { Text("local", Modifier.padding(end = 16.dp), style = MaterialTheme.typography.labelSmall) }) },
+        bottomBar = {
+            NavigationBar {
+                listOf(
+                    0 to "Chat",
+                    4 to "Mémoire",
+                    3 to "Raisonnement",
+                    10 to "Harnais",
+                    9 to "Réglages"
+                ).forEach { (destination, label) ->
+                    NavigationBarItem(
+                        selected = tab == destination,
+                        onClick = { tab = destination },
+                        icon = { Text(when (destination) { 0 -> "●"; 4 -> "◆"; 3 -> "◇"; 10 -> "≡"; else -> "⚙" }) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 12.dp) { tabs.forEachIndexed { i, name -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) }) } }
             when (tab) {
                 0 -> ChatPanel(turns, draft, { draft = it }, busy, ::submit)
                 1 -> SessionPanel(sessions, store.activeSession(), { title -> store.createSession(title); sessions = store.sessions() }, { id -> store.selectSession(id); turns.clear(); turns.addAll(store.loadTurns()) })
@@ -200,6 +217,35 @@ private fun LogosApp(store: HarnessStore) {
                 7 -> ClaimPanel(memoryRecords, claims) { text, critical, evidenceIds -> store.addClaim(text, critical, evidenceIds); refreshGovernance() }
                 8 -> AuditPanel(auditEvents, auditReport, ::refreshGovernance)
                 9 -> SettingsPanel(endpoint, { endpoint = it }, { store.setEndpoint(endpoint) }, { LlamaJni.probe().detail })
+                10 -> HarnessHub { destination -> tab = destination }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HarnessHub(open: (Int) -> Unit) = Column(
+    Modifier.fillMaxSize().padding(16.dp),
+    verticalArrangement = Arrangement.spacedBy(12.dp)
+) {
+    Text("Harnais", style = MaterialTheme.typography.titleLarge)
+    Text("Fonctions avancées. Chaque donnée reste locale ; aucune action externe n'est exécutée depuis cet écran.")
+    listOf(
+        1 to ("Sessions" to "Créer ou reprendre une conversation."),
+        2 to ("Plan" to "Préparer une action réversible."),
+        5 to ("Graphe" to "Relier des éléments mémorisés."),
+        6 to ("Preuves" to "Conserver observations et calculs."),
+        7 to ("Affirmations" to "Relier une affirmation à ses preuves."),
+        8 to ("Audit" to "Vérifier la chaîne locale d'événements.")
+    ).forEach { (destination, item) ->
+        Card(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) { Text(item.first, style = MaterialTheme.typography.titleMedium); Text(item.second, style = MaterialTheme.typography.bodySmall) }
+                Button(onClick = { open(destination) }) { Text("Ouvrir") }
             }
         }
     }
